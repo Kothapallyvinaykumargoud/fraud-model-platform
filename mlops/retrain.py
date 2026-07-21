@@ -57,7 +57,15 @@ def run(threshold: float, simulate_drift: bool, force: bool) -> dict:
 
     candidate_metric = metadata["metrics"][PROMOTION_METRIC]
     current_metric = _current_production_metric()
-    if candidate_metric < current_metric:
+    # Tolerance, not a strict inequality: RandomForestClassifier(n_jobs=-1)
+    # doesn't guarantee bit-identical metrics across separate runs even with
+    # the same random_state (parallel tree-building order varies), so two
+    # independently-trained models on identical data can differ by ~1e-6
+    # purely from floating-point noise. A strict "<" would reject that as a
+    # false regression essentially every time. Only treat it as a real
+    # regression if it exceeds this tolerance.
+    REGRESSION_TOLERANCE = 0.005
+    if candidate_metric < current_metric - REGRESSION_TOLERANCE:
         print(
             f"[retrain] candidate passed validation but {PROMOTION_METRIC}={candidate_metric:.4f} "
             f"< current production {current_metric:.4f} — not promoted (FR-15 regression check)"
