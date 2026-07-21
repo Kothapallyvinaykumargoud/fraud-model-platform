@@ -18,6 +18,8 @@ data:
           - targets: ["inference-api:8000"]
 
       - job_name: kubernetes-cadvisor
+        scrape_interval: 60s
+        scrape_timeout: 30s
         scheme: https
         tls_config:
           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
