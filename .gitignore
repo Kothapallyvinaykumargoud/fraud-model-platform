@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/*.csv
+mlruns/
+mlartifacts/
+*.egg-info/
+.DS_Store
+.pytest_cache/
+
+# Generated model artifacts — produced locally by `python -m model.pipeline`,
+# not shipped. See README "Getting your first model registered."
+production_pointer.json
+models/candidate/
+models/candidate2/
+models/candidate_retrain/
+models/packages/
+models/production/
+models/registration_log.jsonl
+models/validation_log.jsonl
+models/drift_state.json

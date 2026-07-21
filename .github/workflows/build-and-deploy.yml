@@ -1,0 +1,60 @@
+# FR-6: CI Pipeline. FR-7: Deployment.
+# On every push to main (a code change OR a pointer-file commit from
+# train-and-register.yml / the EC2 box's on-demand retrain job), build the
+# serving image and push it to GHCR, then redeploy it to the self-managed
+# k3s cluster over SSH.
+#
+# Required repo secrets for the deploy job (see README "AWS deployment"):
+#   EC2_HOST — public IP or DNS of your EC2 instance
+#   EC2_USER — SSH user (e.g. ubuntu, ec2-user)
+#   EC2_SSH_KEY — private key with access to that instance
+# The deploy job is skipped (not failed) if these aren't set yet, so the
+# build half of this workflow works from the very first push.
+name: build-and-deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        run: echo "image=ghcr.io/${{ github.repository_owner }}/fraud-model-platform:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ secrets.EC2_HOST != '' }}
+    steps:
+      - name: Deploy to k3s via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo k3s kubectl set image deployment/inference-api inference-api=${{ needs.build.outputs.image }} -n fraud-platform
+            sudo k3s kubectl rollout status deployment/inference-api -n fraud-platform --timeout=120s

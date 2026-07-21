@@ -1,0 +1,38 @@
+# Manual trigger for (re)training + registering a Model Version — for the
+# initial model or a deliberate full retrain. The automated drift-triggered
+# retraining loop (FR-14) runs on the EC2 box on-demand, not here (brief/PRD
+# architecture decision: retraining compute stays off GitHub Actions).
+#
+# Requires the "data/creditcard.csv" (Kaggle) dataset to exist in the repo,
+# or falls back to the synthetic stand-in (see model/data.py) — fine for
+# exercising the pipeline, not for a real model.
+name: train-and-register
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Train, validate, package, register
+        run: python -m model.pipeline
+
+      - name: Commit updated model + pointer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add production_pointer.json models/production models/registration_log.jsonl models/validation_log.jsonl
+          git diff --cached --quiet && echo "no changes to commit" || git commit -m "Register new model version via train-and-register workflow"
+          git push

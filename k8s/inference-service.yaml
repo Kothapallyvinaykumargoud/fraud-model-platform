@@ -1,0 +1,15 @@
+# NodePort, not LoadBalancer — self-managed single-node k3s has no cloud LB.
+# Reach it at http://<ec2-public-ip>:30080/predict (client.client --url).
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-api
+  namespace: fraud-platform
+spec:
+  type: NodePort
+  selector:
+    app: inference-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080

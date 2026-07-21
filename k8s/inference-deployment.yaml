@@ -1,0 +1,50 @@
+# FR-7: Deployment. Single-node k3s, resource-constrained for a 1GB
+# free-tier EC2 box (see README "RAM budget" section). RollingUpdate with
+# maxUnavailable: 0 + a readiness probe implements the FR-7 consequence:
+# "if the new pod fails healthy, the previous pod set continues serving."
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-api
+  namespace: fraud-platform
+  labels:
+    app: inference-api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: inference-api
+  template:
+    metadata:
+      labels:
+        app: inference-api
+    spec:
+      containers:
+        - name: inference-api
+          image: IMAGE_PLACEHOLDER # replaced by CI: kubectl set image after build
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: 50m
+              memory: 150Mi
+            limits:
+              cpu: 300m
+              memory: 250Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
