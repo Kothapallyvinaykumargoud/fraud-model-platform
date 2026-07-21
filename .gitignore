@@ -9,14 +9,14 @@ mlartifacts/
 .DS_Store
 .pytest_cache/
 
-# Generated model artifacts — produced locally by `python -m model.pipeline`,
-# not shipped. See README "Getting your first model registered."
-production_pointer.json
+# The registered model (production_pointer.json, models/production/,
+# models/packages/ rollback history, registration/validation logs) IS
+# committed — CI builds the Docker image from it. What's excluded here is
+# raw/near-raw slices of the Kaggle dataset, which the dataset's terms
+# don't clear for redistribution in a public repo — only the trained model
+# artifact ships, not the data it was trained on.
+data/*.csv
 models/candidate/
 models/candidate2/
 models/candidate_retrain/
-models/packages/
-models/production/
-models/registration_log.jsonl
-models/validation_log.jsonl
 models/drift_state.json

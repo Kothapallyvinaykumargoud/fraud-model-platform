@@ -1,0 +1,21 @@
+{
+  "model_name": "fraud-detector",
+  "model_version": 1,
+  "run_id": "254c07c725f94dedbf818aa076acae95",
+  "model_uri": "models:/fraud-detector/1",
+  "artifact_path": "models/production/model.joblib",
+  "package_dir": "models/packages/pkg-c5c36eddf588",
+  "package_id": "pkg-c5c36eddf588",
+  "metrics": {
+    "roc_auc": 0.9620625264575803,
+    "average_precision": 0.7673073786249603,
+    "precision": 0.9012345679012346,
+    "recall": 0.7525773195876289,
+    "f1": 0.8202247191011236,
+    "n_train_rows": 170883,
+    "n_test_rows": 56962,
+    "n_holdout_rows": 56962,
+    "fraud_rate_train": 0.0016970675842535535
+  },
+  "registered_at": "2026-07-21T01:57:04.583942+00:00"
+}
