@@ -1,0 +1,12 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+mlruns/
+mlartifacts/
+data/
+models/candidate/
+models/candidate2/
+models/candidate_retrain/
+models/drift_state.json
+.git/

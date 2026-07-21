@@ -1,5 +1,5 @@
 {
-  "trained_at": "2026-07-21T01:57:01.779735+00:00",
+  "trained_at": "2026-07-21T17:12:52.702954+00:00",
   "data_source": "data/creditcard.csv",
   "metrics": {
     "roc_auc": 0.9620625264575803,
@@ -48,5 +48,5 @@
   "model_type": "RandomForestClassifier",
   "package_id": "pkg-c5c36eddf588",
   "content_hash": "c5c36eddf588",
-  "packaged_at": "2026-07-21T01:57:01.798941+00:00"
+  "packaged_at": "2026-07-21T17:12:52.723526+00:00"
 }

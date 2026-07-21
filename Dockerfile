@@ -13,7 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY model/data.py model/__init__.py model/
 COPY serving/ serving/
 COPY production_pointer.json .
-COPY models/production/ models/production/
+# Whole models/ dir, not just models/production/: shadow deployment (if
+# models/shadow/ exists) rides along the same way, without needing a
+# separate COPY line that would fail the build when no shadow exists yet.
+COPY models/ models/
 
 EXPOSE 8000
 CMD ["uvicorn", "serving.app:app", "--host", "0.0.0.0", "--port", "8000"]

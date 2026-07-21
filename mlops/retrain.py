@@ -1,10 +1,16 @@
 """FR-14: Drift-Triggered Retraining. FR-15: Auto-Retrain Promotion Gate.
 
-Runs the Drift Check; if triggered, retrains a candidate and only lets it
-replace the Production Pointer if it (a) passes the Validation Gate (FR-1)
-and (b) matches or exceeds the current production Model Version's held-out
-metric (PRD §4.6 FR-15 resolved assumption — a retrain that clears the bar
-but is *worse* than what's running does not get promoted).
+Runs the Drift Check; if triggered, retrains a candidate and — if it (a)
+passes the Validation Gate (FR-1) and (b) matches or exceeds the current
+production Model Version's held-out metric (PRD §4.6 FR-15) — registers it
+as a SHADOW candidate, not production. It does not touch real traffic.
+
+This is deliberately NOT full auto-promotion: a retrain that clears both
+gates still only earns a spot serving shadow traffic (scored on every real
+request, logged, never returned to the caller — see serving/app.py). A
+human reviews the shadow's live agreement rate with production and runs
+mlops/promote_shadow.py to actually put it in front of real users. This is
+the human-in-the-loop step a fully automatic pipeline was missing.
 
 Designed to run on-demand on the EC2 box (brief/PRD architecture decision),
 sharing it with MLflow's on-demand registration rather than running
@@ -20,7 +26,7 @@ import json
 import os
 
 from model.package import package
-from model.register import register
+from model.register import register_shadow
 from model.train import train
 from model.validate import validate
 from mlops.drift_check import run as check_drift
@@ -52,8 +58,8 @@ def run(threshold: float, simulate_drift: bool, force: bool) -> dict:
 
     passed, validation_record = validate(candidate_dir)
     if not passed:
-        print(f"[retrain] candidate FAILED validation gate: {validation_record['failures']} — not promoted")
-        return {"retrained": True, "promoted": False, "reason": "failed validation gate", "validation": validation_record}
+        print(f"[retrain] candidate FAILED validation gate: {validation_record['failures']} — discarded")
+        return {"retrained": True, "shadowed": False, "reason": "failed validation gate", "validation": validation_record}
 
     candidate_metric = metadata["metrics"][PROMOTION_METRIC]
     current_metric = _current_production_metric()
@@ -68,20 +74,21 @@ def run(threshold: float, simulate_drift: bool, force: bool) -> dict:
     if candidate_metric < current_metric - REGRESSION_TOLERANCE:
         print(
             f"[retrain] candidate passed validation but {PROMOTION_METRIC}={candidate_metric:.4f} "
-            f"< current production {current_metric:.4f} — not promoted (FR-15 regression check)"
+            f"< current production {current_metric:.4f} — not worth shadowing (FR-15 regression check)"
         )
         return {
             "retrained": True,
-            "promoted": False,
+            "shadowed": False,
             "reason": "regression vs current production",
             "candidate_metric": candidate_metric,
             "current_metric": current_metric,
         }
 
     package_dir = package(candidate_dir)
-    pointer = register(package_dir)
-    print(f"[retrain] candidate PROMOTED — production is now version {pointer['model_version']}")
-    return {"retrained": True, "promoted": True, "pointer": pointer}
+    pointer = register_shadow(package_dir)
+    print(f"[retrain] candidate registered as SHADOW — version {pointer['model_version']}")
+    print("[retrain] production traffic is UNCHANGED. Review shadow agreement, then run mlops/promote_shadow.py")
+    return {"retrained": True, "shadowed": True, "pointer": pointer}
 
 
 if __name__ == "__main__":
