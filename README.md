@@ -192,7 +192,7 @@ minutes). Set up a periodic check with cron:
 
 ```bash
 # crontab -e, on the EC2 box, in the repo directory:
-0 */6 * * * cd /path/to/fraud-model-platform && .venv/bin/python -m mlops.retrain >> /var/log/fraud-retrain.log 2>&1 && git add production_pointer.json models/production models/registration_log.jsonl && git commit -m "auto-retrain" && git push || true
+0 */6 * * * cd /path/to/fraud-model-platform && .venv/bin/python -m mlops.retrain >> /var/log/fraud-retrain.log 2>&1 && git add production_pointer.json models/production models/packages models/registration_log.jsonl models/validation_log.jsonl && git commit -m "auto-retrain" && git push || true
 ```
 
 You'll need the EC2 box to have push access to your repo (a deploy key or
