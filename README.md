@@ -133,7 +133,7 @@ From your laptop or the EC2 box itself (with this repo checked out and a
 model already registered — step 2):
 
 ```bash
-IMAGE=ghcr.io/<your-github-username>/fraud-model-platform:manual ./k8s/deploy.sh
+IMAGE=ghcr.io/<your-github-username-lowercase>/fraud-model-platform:manual ./k8s/deploy.sh
 ```
 
 This sets up the namespace, RBAC, Prometheus, Grafana (provisioned from

@@ -36,7 +36,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        run: echo "image=ghcr.io/${{ github.repository_owner }}/fraud-model-platform:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${owner}/fraud-model-platform:${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/build-push-action@v6
         with:
