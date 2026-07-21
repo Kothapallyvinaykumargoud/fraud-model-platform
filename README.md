@@ -188,16 +188,32 @@ it just skips the deploy step rather than failing.
 
 This runs **on the box**, on-demand, not in GitHub Actions (deliberate —
 see `mlops/retrain.py` docstring: keeps it off the RAM budget and off CI
-minutes). Set up a periodic check with cron:
+minutes). Confirmed working live, end to end, on AWS.
 
-```bash
-# crontab -e, on the EC2 box, in the repo directory:
-0 */6 * * * cd /path/to/fraud-model-platform && .venv/bin/python -m mlops.retrain >> /var/log/fraud-retrain.log 2>&1 && git add production_pointer.json models/production models/packages models/registration_log.jsonl models/validation_log.jsonl && git commit -m "auto-retrain" && git push || true
-```
+**Setup (what's actually running):**
 
-You'll need the EC2 box to have push access to your repo (a deploy key or
-a PAT) for the last step. When a retrain gets promoted and pushed,
-`build-and-deploy.yml` picks it up like any other push.
+1. Python 3.11 + venv on the box: `sudo dnf install -y python3.11 python3.11-pip cronie`
+2. The real dataset transferred **privately via `scp`**, not through the public repo:
+   `scp -i your-key.pem data/creditcard.csv ec2-user@<ip>:~/fraud-model-platform/data/`
+   (same redistribution-terms reasoning as §"Ship the trained model" — the model can ship publicly, the raw dataset shouldn't.)
+3. `python -m model.train` once, to produce `models/candidate/holdout.csv` (the drift-check baseline) — doesn't touch the deployed production pointer.
+4. A dedicated **SSH deploy key** (not your personal key) so the box can push on its own:
+   ```bash
+   ssh-keygen -t ed25519 -C "fraud-platform-ec2-deploy-key" -f ~/.ssh/github_deploy_key -N ""
+   # add ~/.ssh/github_deploy_key.pub as a repo Deploy Key with write access (repo Settings -> Deploy keys, or `gh repo deploy-key add`)
+   ```
+   Then point git at it (`~/.ssh/config` with an `IdentityFile` entry for `github.com`) and `git remote set-url origin git@github.com:...` (SSH, not HTTPS).
+5. Cron:
+   ```bash
+   # crontab -e
+   0 */6 * * * cd /home/ec2-user/fraud-model-platform && .venv/bin/python -m mlops.retrain >> /home/ec2-user/fraud-retrain.log 2>&1 && git add production_pointer.json models/production models/packages models/registration_log.jsonl models/validation_log.jsonl && git commit -m "auto-retrain: drift-triggered promotion" && git push >> /home/ec2-user/fraud-retrain.log 2>&1 || true
+   0 3 * * 0 sudo k3s crictl rmi --prune >> /home/ec2-user/image-prune.log 2>&1
+   ```
+   Note `models/packages` in the `git add` — `mlops/package.py` creates a **new** directory every retrain, and `mlops/rollback.py` needs it there to have something to roll back to later. Easy to miss (we did, the first time).
+
+**Lesson learned running this for real:** every promotion triggers a new CI build + deploy, which pulls a new ~170MB image onto the node. The default 8GB EBS root volume fills up fast under repeated deploys — we hit real `DiskPressure` (not the RAM issue from §7.1) after three deploys in quick succession, which cascaded into mass pod evictions across the whole namespace. Fixed by resizing to 20GB (`EC2 Console -> Elastic Block Store -> Volumes -> Modify volume`, then on the box: `sudo growpart /dev/nvme0n1 1 && sudo xfs_growfs -d /` — no reboot needed) and adding the weekly `crictl rmi --prune` cron line above. If you skip the resize, expect this to recur within a handful of retrain cycles.
+
+**Also learned:** floating-point non-determinism. `RandomForestClassifier(n_jobs=-1)` doesn't produce bit-identical metrics across separate runs even with the same `random_state` — two models trained on identical data differed by ~2e-6 ROC-AUC purely from parallel tree-building order. The promotion gate in `mlops/retrain.py` uses a `0.005` tolerance, not a strict `<`, specifically because of this — a strict inequality would reject nearly every retrain as a "regression" that wasn't real.
 
 ## Open items (see PRD §8 for the full list)
 
@@ -205,17 +221,23 @@ Resolved by actually deploying this:
 
 - ~~Whether Prometheus + Grafana + the API fit in 1GB steady-state~~ — they
   don't, reliably. Use `t3.small` (see §7.1).
+- ~~Whether the automated drift-triggered retraining loop works live on
+  AWS~~ — yes, confirmed end to end (§7.6): real drift detected on real
+  data, real retrain, real promotion, real `git push` from the box's own
+  deploy key, real CI redeploy.
 
 Still open, deliberately left for you to decide once this is running:
 
 - The drift threshold (`0.25` PSI default in `mlops/drift_check.py`) —
-  tune once you see real Drift Scores.
+  tune once you see real Drift Scores in Grafana over time.
 - Whether your AWS account is still within its free-tier window (moot for
   the EC2 box once you're on `t3.small`, which was never free-tier — but
-  still relevant to other AWS usage).
-- The automated drift-triggered retraining loop (`mlops/retrain.py`) has
-  been verified locally end-to-end but not yet run live on the EC2 box —
-  see §7.6 to set that up when you're ready.
+  still relevant to other AWS usage, including EBS beyond the 30GB/month
+  free allowance).
+- No Elastic IP set up yet — the public IP changes every time the
+  instance stops/starts, which breaks the `EC2_HOST` GitHub secret and
+  any bookmarks until you update it. Recommended: `EC2 Console -> Elastic
+  IPs -> Allocate -> Associate` with the instance.
 
 ## Planning docs
 
