@@ -97,18 +97,29 @@ docker rm -f fraud-test
 ### 7.1 Launch the EC2 box
 
 - Instance type: `t2.micro` or `t3.micro` (free-tier eligible — confirm your
-  account is still within its 12-month window).
-- Security group: allow inbound SSH (22), and NodePorts 30080 (API), 30090
-  (Prometheus), 30030 (Grafana) from your IP.
+  account is still within its 12-month window). **Confirmed by building
+  this**: a 1GB `t2.micro`/`t3.micro` is not enough — k3s's own control
+  plane alone uses ~370Mi, and CoreDNS + metrics-server + Traefik (bundled
+  into k3s by default) + Prometheus + Grafana + the API push it into a
+  crash-restart loop even with swap. Use **`t3.small` (2GB)** instead —
+  it's outside the free tier (~$0.0208/hr, ~$15/month if left running
+  24/7, ~$0 if you stop the instance between sessions).
+- Security group: allow inbound **SSH (22) from Anywhere-IPv4
+  (`0.0.0.0/0`)**, not just "My IP" — GitHub Actions' runners connect from
+  their own cloud IPs, not yours, so restricting SSH to your IP silently
+  breaks CI's deploy step. Key-based auth only, so this is standard
+  practice, not a real exposure. Also allow NodePorts 30080 (API), 30090
+  (Prometheus), 30030 (Grafana) — from your IP is fine for these three.
 - **Not EKS** — this project deliberately runs self-managed Kubernetes to
   avoid the ~$0.10/hr EKS control-plane charge.
+- Amazon Linux doesn't ship with `git` — `sudo dnf install -y git` before
+  cloning this repo onto the instance.
 
-### 7.2 Add swap (do this before installing k3s)
+### 7.2 Add swap
 
-A 1GB box running k3s + Prometheus + Grafana + the API is genuinely tight —
-this was flagged as an open risk in planning and is unverified until you
-build it. Swap won't fix CPU pressure but gives k3s headroom to not get
-OOM-killed during bursts:
+Cheap insurance even on 2GB — doesn't fix CPU pressure, but gives k3s
+headroom during bursts (e.g. a rolling deployment briefly running two pod
+versions at once):
 
 ```bash
 sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile
@@ -116,21 +127,28 @@ sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
-If things still don't fit: drop Grafana first (query Prometheus directly),
-then shorten Prometheus retention further, before considering a bigger
-instance.
+If you're stuck on a 1GB instance and things still don't fit after this:
+drop Grafana first (query Prometheus directly), then shorten Prometheus
+retention further — but honestly, resizing to `t3.small` is less fighting
+than tuning around a genuinely undersized box.
 
-### 7.3 Install k3s
+### 7.3 Install k3s and set up kubectl access
 
 ```bash
 curl -sfL https://get.k3s.io | sh -
-sudo k3s kubectl get nodes   # confirms it's up
+mkdir -p ~/.kube
+sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+sudo chown $(whoami):$(whoami) ~/.kube/config
+export KUBECONFIG=~/.kube/config   # add to ~/.bashrc to persist across sessions
+kubectl get nodes   # confirms it's up, status should be Ready
 ```
 
 ### 7.4 First deploy
 
-From your laptop or the EC2 box itself (with this repo checked out and a
-model already registered — step 2):
+From the EC2 box, with this repo cloned and a model already registered
+(step 2 — run `python -m model.pipeline` there too, or `scp` your local
+`production_pointer.json` + `models/production/` + `models/packages/`
+over):
 
 ```bash
 IMAGE=ghcr.io/<your-github-username-lowercase>/fraud-model-platform:manual ./k8s/deploy.sh
@@ -139,7 +157,8 @@ IMAGE=ghcr.io/<your-github-username-lowercase>/fraud-model-platform:manual ./k8s
 This sets up the namespace, RBAC, Prometheus, Grafana (provisioned from
 `monitoring/grafana/`), and the inference API. For this very first run
 you'll need an image already pushed (see 7.5) — after that, CI handles
-rebuilds automatically.
+rebuilds automatically. Check `kubectl get pods -n fraud-platform` — all
+three should reach `1/1 Running` within a minute or so.
 
 Visit `http://<ec2-public-ip>:30080/health`, `:30090` (Prometheus),
 `:30030` (Grafana, `admin` / the password you set in
@@ -182,13 +201,21 @@ a PAT) for the last step. When a retrain gets promoted and pushed,
 
 ## Open items (see PRD §8 for the full list)
 
-A few things are deliberately left for you to decide/verify once this is
-actually running, not resolved in code:
+Resolved by actually deploying this:
 
-- Whether Prometheus + Grafana + the API actually fit in 1GB steady-state.
+- ~~Whether Prometheus + Grafana + the API fit in 1GB steady-state~~ — they
+  don't, reliably. Use `t3.small` (see §7.1).
+
+Still open, deliberately left for you to decide once this is running:
+
 - The drift threshold (`0.25` PSI default in `mlops/drift_check.py`) —
   tune once you see real Drift Scores.
-- Whether your AWS account is still within its free-tier window.
+- Whether your AWS account is still within its free-tier window (moot for
+  the EC2 box once you're on `t3.small`, which was never free-tier — but
+  still relevant to other AWS usage).
+- The automated drift-triggered retraining loop (`mlops/retrain.py`) has
+  been verified locally end-to-end but not yet run live on the EC2 box —
+  see §7.6 to set that up when you're ready.
 
 ## Planning docs
 
