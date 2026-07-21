@@ -34,5 +34,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add production_pointer.json models/production models/registration_log.jsonl models/validation_log.jsonl
-          git diff --cached --quiet && echo "no changes to commit" || git commit -m "Register new model version via train-and-register workflow"
-          git push
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+          else
+            git commit -m "Register new model version via train-and-register workflow"
+            git push
+          fi
