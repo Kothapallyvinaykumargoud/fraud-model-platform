@@ -29,6 +29,17 @@ def package(candidate_dir: str) -> str:
 
     shutil.copy2(model_path, os.path.join(package_dir, "model.joblib"))
 
+    # The feature definitions this specific model was trained against
+    # travel with it — a package is only replayable (and only servable)
+    # alongside the exact vocabulary/columns it was fit on.
+    feature_definitions_path = os.path.join(candidate_dir, "feature_definitions.json")
+    if os.path.exists(feature_definitions_path):
+        shutil.copy2(feature_definitions_path, os.path.join(package_dir, "feature_definitions.json"))
+
+    shap_summary_path = os.path.join(candidate_dir, "shap_summary.json")
+    if os.path.exists(shap_summary_path):
+        shutil.copy2(shap_summary_path, os.path.join(package_dir, "shap_summary.json"))
+
     package_metadata = {
         **metadata,
         "package_id": package_id,

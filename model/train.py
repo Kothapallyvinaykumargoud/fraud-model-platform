@@ -3,7 +3,7 @@ is a means, not the goal (PRD §7 SM-C1 counter-metric: don't optimize
 prediction accuracy over the platform work).
 
 Usage:
-    python -m model.train [--data data/creditcard.csv] [--out models/candidate]
+    python -m model.train [--data data/ieee_cis_sample.csv] [--out models/candidate]
 """
 import argparse
 import json
@@ -15,16 +15,20 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import average_precision_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 
-from model.data import FEATURE_COLUMNS, LABEL_COLUMN, load_dataset, split_train_holdout
+from model.data import LABEL_COLUMN, RAW_FEATURE_COLUMNS, load_dataset, split_train_holdout
+from model.explain import compute_shap_summary
+from model.features import fit_feature_definitions, model_feature_names, save_feature_definitions, transform
 
 
 def train(data_path: str, out_dir: str, seed: int = 42) -> dict:
     df = load_dataset(data_path)
     train_df, holdout_df = split_train_holdout(df, holdout_frac=0.2, seed=seed)
 
-    # Holdout is reserved for drift simulation — carve the model's own
-    # test split out of the training slice only.
-    X = train_df[FEATURE_COLUMNS]
+    # Feature definitions (vocab, column list) are fit on the training
+    # slice only — the holdout stays untouched by anything derived from it,
+    # same discipline as the train/test split below.
+    definitions = fit_feature_definitions(train_df)
+    X = transform(train_df, definitions)
     y = train_df[LABEL_COLUMN]
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.25, random_state=seed, stratify=y
@@ -53,15 +57,21 @@ def train(data_path: str, out_dir: str, seed: int = 42) -> dict:
         "fraud_rate_train": float(y_train.mean()),
     }
 
+    shap_summary = compute_shap_summary(clf, X_test, model_feature_names(definitions))
+
     os.makedirs(out_dir, exist_ok=True)
     joblib.dump(clf, os.path.join(out_dir, "model.joblib"))
     holdout_df.to_csv(os.path.join(out_dir, "holdout.csv"), index=False)
+    save_feature_definitions(definitions, os.path.join(out_dir, "feature_definitions.json"))
+    with open(os.path.join(out_dir, "shap_summary.json"), "w") as f:
+        json.dump(shap_summary, f, indent=2)
 
     metadata = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "data_source": data_path if os.path.exists(data_path) else "synthetic",
         "metrics": metrics,
-        "feature_columns": FEATURE_COLUMNS,
+        "raw_feature_columns": RAW_FEATURE_COLUMNS,
+        "feature_columns": model_feature_names(definitions),
         "label_column": LABEL_COLUMN,
         "model_type": "RandomForestClassifier",
     }
@@ -75,7 +85,7 @@ def train(data_path: str, out_dir: str, seed: int = 42) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", default="data/creditcard.csv")
+    parser.add_argument("--data", default="data/ieee_cis_sample.csv")
     parser.add_argument("--out", default="models/candidate")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()

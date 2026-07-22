@@ -34,10 +34,20 @@ def promote(clear_shadow: bool = False) -> dict:
     production_artifact = os.path.join(PRODUCTION_MODEL_DIR, "model.joblib")
     shutil.copy2(shadow_pointer["artifact_path"], production_artifact)
 
+    # feature_definitions.json travels with the model into its new slot,
+    # same as model.joblib — production must transform with the exact
+    # vocabulary this (formerly shadow) version was trained on.
+    production_feature_definitions = None
+    shadow_feature_definitions = shadow_pointer.get("feature_definitions_path")
+    if shadow_feature_definitions and os.path.exists(shadow_feature_definitions):
+        production_feature_definitions = os.path.join(PRODUCTION_MODEL_DIR, "feature_definitions.json")
+        shutil.copy2(shadow_feature_definitions, production_feature_definitions)
+
     pointer = {
         **shadow_pointer,
         "status": "production",
         "artifact_path": production_artifact,
+        "feature_definitions_path": production_feature_definitions,
         "promoted_from_shadow_at": datetime.now(timezone.utc).isoformat(),
     }
     with open(PRODUCTION_POINTER_PATH, "w") as f:

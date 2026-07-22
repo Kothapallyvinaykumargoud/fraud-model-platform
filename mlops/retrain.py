@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 
+from model.data import DEFAULT_CSV_PATH
 from model.package import package
 from model.register import register_shadow
 from model.train import train
@@ -54,7 +55,7 @@ def run(threshold: float, simulate_drift: bool, force: bool) -> dict:
         print("[retrain] --force — retraining without a drift check")
 
     candidate_dir = "models/candidate_retrain"
-    metadata = train(data_path="data/creditcard.csv", out_dir=candidate_dir)
+    metadata = train(data_path=DEFAULT_CSV_PATH, out_dir=candidate_dir)
 
     passed, validation_record = validate(candidate_dir)
     if not passed:

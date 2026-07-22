@@ -1,0 +1,67 @@
+{
+  "version": "v1",
+  "numeric_columns": [
+    "TransactionAmt",
+    "dist1",
+    "C1",
+    "C2",
+    "D1"
+  ],
+  "categorical_columns": [
+    "ProductCD",
+    "card4",
+    "card6",
+    "P_emaildomain",
+    "DeviceType"
+  ],
+  "vocab": {
+    "ProductCD": [
+      "W",
+      "C",
+      "R",
+      "H",
+      "S"
+    ],
+    "card4": [
+      "visa",
+      "mastercard",
+      "american express",
+      "discover",
+      "missing"
+    ],
+    "card6": [
+      "debit",
+      "credit",
+      "missing",
+      "charge card",
+      "debit or credit"
+    ],
+    "P_emaildomain": [
+      "gmail.com",
+      "yahoo.com",
+      "missing",
+      "hotmail.com",
+      "anonymous.com",
+      "aol.com",
+      "comcast.net",
+      "icloud.com",
+      "outlook.com",
+      "msn.com",
+      "att.net",
+      "live.com",
+      "sbcglobal.net",
+      "verizon.net",
+      "ymail.com",
+      "bellsouth.net",
+      "me.com",
+      "yahoo.com.mx",
+      "cox.net",
+      "optonline.net"
+    ],
+    "DeviceType": [
+      "missing",
+      "desktop",
+      "mobile"
+    ]
+  }
+}

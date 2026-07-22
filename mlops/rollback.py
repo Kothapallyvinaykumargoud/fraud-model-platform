@@ -60,9 +60,19 @@ def rollback(target_version: int) -> dict:
     restored_artifact = os.path.join(PRODUCTION_MODEL_DIR, "model.joblib")
     shutil.copy2(source_artifact, restored_artifact)
 
+    # The rolled-back version's own feature_definitions.json travels with
+    # it — model.package never deletes package_dir, so it's still there
+    # even for an old version.
+    restored_feature_definitions = None
+    source_feature_definitions = os.path.join(package_dir, "feature_definitions.json")
+    if os.path.exists(source_feature_definitions):
+        restored_feature_definitions = os.path.join(PRODUCTION_MODEL_DIR, "feature_definitions.json")
+        shutil.copy2(source_feature_definitions, restored_feature_definitions)
+
     pointer = {
         **entry,
         "artifact_path": restored_artifact,
+        "feature_definitions_path": restored_feature_definitions,
         "rolled_back_at": datetime.now(timezone.utc).isoformat(),
         "rollback_from_log_entry": entry["registered_at"],
     }

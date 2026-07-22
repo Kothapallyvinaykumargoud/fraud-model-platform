@@ -10,7 +10,7 @@ ENV PYTHONUNBUFFERED=1
 COPY serving/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY model/data.py model/__init__.py model/
+COPY model/data.py model/features.py model/__init__.py model/
 COPY serving/ serving/
 COPY production_pointer.json .
 # Whole models/ dir, not just models/production/: shadow deployment (if

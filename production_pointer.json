@@ -2,22 +2,22 @@
   "status": "production",
   "model_name": "fraud-detector",
   "model_version": 2,
-  "run_id": "52fb3d5bcece4fdd94ec07ef868676a1",
+  "run_id": "de5c74c6296743c7af5c8998565b6822",
   "model_uri": "models:/fraud-detector/2",
   "artifact_path": "models/production/model.joblib",
-  "package_dir": "models/packages/pkg-c5c36eddf588",
-  "package_id": "pkg-c5c36eddf588",
+  "feature_definitions_path": "models/production/feature_definitions.json",
+  "package_dir": "models/packages/pkg-d142fd7019a4",
+  "package_id": "pkg-d142fd7019a4",
   "metrics": {
-    "roc_auc": 0.9620625264575803,
-    "average_precision": 0.7673073786249603,
-    "precision": 0.9012345679012346,
-    "recall": 0.7525773195876289,
-    "f1": 0.8202247191011236,
-    "n_train_rows": 170883,
-    "n_test_rows": 56962,
-    "n_holdout_rows": 56962,
-    "fraud_rate_train": 0.0016970675842535535
+    "roc_auc": 0.8167661338725581,
+    "average_precision": 0.3752534333801892,
+    "precision": 0.17434507678410116,
+    "recall": 0.5545977011494253,
+    "f1": 0.2652920962199313,
+    "n_train_rows": 30000,
+    "n_test_rows": 10000,
+    "n_holdout_rows": 10000,
+    "fraud_rate_train": 0.03476666666666667
   },
-  "registered_at": "2026-07-21T17:12:56.610224+00:00",
-  "promoted_from_shadow_at": "2026-07-21T17:15:52.479385+00:00"
+  "registered_at": "2026-07-21T23:39:13.141606+00:00"
 }

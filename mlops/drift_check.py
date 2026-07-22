@@ -5,13 +5,16 @@ distribution as training but never trained on) and computes a Drift Score.
 Method (resolves PRD §8 Open Question 1): Population Stability Index (PSI),
 averaged across features — a standard, well-understood drift statistic.
 PSI < 0.1: no meaningful shift. 0.1-0.25: moderate. > 0.25: significant.
-Default threshold: 0.25 (--threshold to override).
+Default threshold: 0.25 (--threshold to override). Numeric columns use the
+usual quantile-bin PSI; categorical columns (card network, device type,
+etc.) use a category-frequency PSI instead, since quantile bins don't mean
+anything for a string column.
 
 With --simulate-drift, draws a fresh sample from the holdout set and applies
-the same synthetic shift as client.client --drifted, so the whole loop
-(check -> retrain -> validate -> register -> redeploy) can be exercised
-without needing a real live feed (brief decision: "Simulated drift from
-held-back data").
+the same synthetic shift as client.client --drifted (model.data.
+apply_synthetic_drift), so the whole loop (check -> retrain -> validate ->
+register -> redeploy) can be exercised without needing a real live feed
+(brief decision: "Simulated drift from held-back data").
 
 Usage:
     python -m mlops.drift_check                     # check against unshifted holdout sample
@@ -26,15 +29,16 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from model.data import FEATURE_COLUMNS
+from model.data import apply_synthetic_drift
+from model.features import CATEGORICAL_COLUMNS, NUMERIC_COLUMNS
 
 HOLDOUT_PATH = "models/candidate/holdout.csv"
 DRIFT_STATE_PATH = "models/drift_state.json"
 DEFAULT_THRESHOLD = 0.25
 
 
-def _psi(reference: np.ndarray, comparison: np.ndarray, bins: int = 10) -> float:
-    """Population Stability Index for one feature."""
+def _psi_numeric(reference: np.ndarray, comparison: np.ndarray, bins: int = 10) -> float:
+    """Population Stability Index for one numeric feature."""
     edges = np.quantile(reference, np.linspace(0, 1, bins + 1))
     edges = np.unique(edges)
     if len(edges) < 2:
@@ -49,11 +53,45 @@ def _psi(reference: np.ndarray, comparison: np.ndarray, bins: int = 10) -> float
     return float(np.sum((cmp_pct - ref_pct) * np.log(cmp_pct / ref_pct)))
 
 
+def _psi_categorical(reference: pd.Series, comparison: pd.Series) -> float:
+    """PSI for one categorical feature: bins are the union of both sides'
+    categories, not quantiles."""
+    ref = reference.astype(str)
+    cmp = comparison.astype(str)
+    ref_counts = ref.value_counts()
+    cmp_counts = cmp.value_counts()
+    ref_total = max(len(ref), 1)
+    cmp_total = max(len(cmp), 1)
+
+    psi = 0.0
+    for category in set(ref_counts.index) | set(cmp_counts.index):
+        ref_pct = max(ref_counts.get(category, 0) / ref_total, 1e-6)
+        cmp_pct = max(cmp_counts.get(category, 0) / cmp_total, 1e-6)
+        psi += (cmp_pct - ref_pct) * np.log(cmp_pct / ref_pct)
+    return float(psi)
+
+
 def compute_drift_score(reference_df: pd.DataFrame, comparison_df: pd.DataFrame) -> dict:
+    # Real IEEE-CIS data has heavy missingness in some columns (dist1 is
+    # NaN for ~60% of rows) — np.quantile propagates NaN into every edge
+    # it computes, which collapses to a single unique value and silently
+    # reports 0 PSI regardless of actual drift. Filling with the same
+    # sentinel model.features.transform() uses (0.0 / "missing") keeps
+    # this measuring the same signal the model actually gets fed.
     per_feature = {
-        col: _psi(reference_df[col].to_numpy(), comparison_df[col].to_numpy())
-        for col in FEATURE_COLUMNS
+        col: _psi_numeric(
+            reference_df[col].fillna(0.0).to_numpy(), comparison_df[col].fillna(0.0).to_numpy()
+        )
+        for col in NUMERIC_COLUMNS
     }
+    per_feature.update(
+        {
+            col: _psi_categorical(
+                reference_df[col].fillna("missing"), comparison_df[col].fillna("missing")
+            )
+            for col in CATEGORICAL_COLUMNS
+        }
+    )
     drift_score = float(np.mean(list(per_feature.values())))
     return {"drift_score": drift_score, "per_feature_psi": per_feature}
 
@@ -64,9 +102,7 @@ def _load_comparison_batch(batch_path: str, simulate_drift: bool, reference_df: 
 
     sample = reference_df.sample(frac=0.5, random_state=None).reset_index(drop=True)
     if simulate_drift:
-        for col in [c for c in FEATURE_COLUMNS if c.startswith("V")]:
-            sample[col] = sample[col] + 3.0
-        sample["Amount"] = sample["Amount"] * 2.5
+        sample = apply_synthetic_drift(sample)
     return sample
 
 

@@ -3,9 +3,11 @@
 # retraining loop (FR-14) runs on the EC2 box on-demand, not here (brief/PRD
 # architecture decision: retraining compute stays off GitHub Actions).
 #
-# Requires the "data/creditcard.csv" (Kaggle) dataset to exist in the repo,
-# or falls back to the synthetic stand-in (see model/data.py) — fine for
-# exercising the pipeline, not for a real model.
+# Downloads the real "data/ieee_cis_sample.csv" (Kaggle IEEE-CIS) dataset
+# if the KAGGLE_API_TOKEN repo secret is set, or falls back to the
+# synthetic stand-in (see model/data.py) — fine for exercising the
+# pipeline, not for a real model. See data/README.md for what the secret
+# needs and why a Kaggle competition dataset needs more than just a token.
 name: train-and-register
 
 on:
@@ -25,6 +27,16 @@ jobs:
           python-version: "3.11"
 
       - run: pip install -r requirements.txt
+
+      - name: Download real IEEE-CIS sample (optional)
+        env:
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+        run: |
+          if [ -z "$KAGGLE_API_TOKEN" ]; then
+            echo "KAGGLE_API_TOKEN not set — training on synthetic stand-in data (see data/README.md)."
+          else
+            python -m mlops.download_ieee_cis
+          fi
 
       - name: Train, validate, package, register
         run: python -m model.pipeline

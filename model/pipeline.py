@@ -4,7 +4,7 @@ steps. Unconditional — no drift check or regression gate (that's
 mlops/retrain.py's job, for the drift-triggered path on the EC2 box).
 
 Usage:
-    python -m model.pipeline [--data data/creditcard.csv]
+    python -m model.pipeline [--data data/ieee_cis_sample.csv]
 """
 import argparse
 import sys
@@ -15,7 +15,7 @@ from model.train import train
 from model.validate import validate
 
 
-def run(data_path: str = "data/creditcard.csv", candidate_dir: str = "models/candidate") -> dict:
+def run(data_path: str = "data/ieee_cis_sample.csv", candidate_dir: str = "models/candidate") -> dict:
     train(data_path=data_path, out_dir=candidate_dir)
 
     passed, record = validate(candidate_dir)
@@ -30,6 +30,6 @@ def run(data_path: str = "data/creditcard.csv", candidate_dir: str = "models/can
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", default="data/creditcard.csv")
+    parser.add_argument("--data", default="data/ieee_cis_sample.csv")
     args = parser.parse_args()
     run(args.data)

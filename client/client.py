@@ -1,8 +1,10 @@
 """FR-9: Client Script. Stands in for "Banking Applications" — sends
 realistic Transaction Payloads to the inference API and prints the Fraud
 Verdict received. Supports a --drifted mode that sources payloads from the
-held-out data with a synthetic shift applied, for exercising the drift
-detection loop (FR-13).
+held-out data with model.data.apply_synthetic_drift applied, for
+exercising the drift detection loop (FR-13) — the same shift
+mlops/drift_check.py --simulate-drift uses, so "drifted" means the same
+thing in both places.
 
 Usage:
     python -m client.client --url http://localhost:8000 --count 10
@@ -14,7 +16,8 @@ import sys
 import pandas as pd
 import requests
 
-from model.data import FEATURE_COLUMNS
+from model.data import apply_synthetic_drift
+from model.features import CATEGORICAL_COLUMNS, NUMERIC_COLUMNS
 
 HOLDOUT_PATH = "models/candidate/holdout.csv"
 
@@ -31,23 +34,27 @@ def _load_batch(count: int, drifted: bool) -> pd.DataFrame:
 
     batch = df.sample(n=min(count, len(df)), random_state=None).reset_index(drop=True)
     if drifted:
-        # Mirrors mlops/drift_check.py's synthetic shift so the client can
-        # reproduce a drift-triggering batch on demand.
-        for col in [c for c in FEATURE_COLUMNS if c.startswith("V")]:
-            batch[col] = batch[col] + 3.0
-        batch["Amount"] = batch["Amount"] * 2.5
+        batch = apply_synthetic_drift(batch)
     return batch
+
+
+def _row_to_payload(row: pd.Series) -> dict:
+    # Real IEEE-CIS data has genuine missing values (dist1, DeviceType,
+    # etc. are NaN for a large fraction of rows) — `requests` refuses to
+    # encode a NaN float into JSON at all, so it has to be sanitized here,
+    # not left for the server. Same fallbacks model/features.py's
+    # transform() would apply anyway (0.0 for numeric, "missing" for
+    # categorical), just applied before the wire instead of after.
+    payload = {col: (0.0 if pd.isna(row[col]) else float(row[col])) for col in NUMERIC_COLUMNS}
+    payload.update({col: ("missing" if pd.isna(row[col]) else str(row[col])) for col in CATEGORICAL_COLUMNS})
+    return payload
 
 
 def run(url: str, count: int, drifted: bool):
     batch = _load_batch(count, drifted)
     fraud_count = 0
     for _, row in batch.iterrows():
-        payload = {
-            "Time": float(row["Time"]),
-            "Amount": float(row["Amount"]),
-            "V": [float(row[f"V{i}"]) for i in range(1, 29)],
-        }
+        payload = _row_to_payload(row)
         try:
             resp = requests.post(f"{url}/predict", json=payload, timeout=5)
             resp.raise_for_status()
@@ -59,8 +66,8 @@ def run(url: str, count: int, drifted: bool):
         if verdict["verdict"] == "fraud":
             fraud_count += 1
         print(
-            f"[client] amount=${row['Amount']:.2f} -> {verdict['verdict']} "
-            f"(confidence={verdict['confidence']}, model_version={verdict['model_version']})"
+            f"[client] amount=${payload['TransactionAmt']:.2f} card={payload['card4']} device={payload['DeviceType']} "
+            f"-> {verdict['verdict']} (confidence={verdict['confidence']}, model_version={verdict['model_version']})"
         )
 
     print(f"[client] {fraud_count}/{len(batch)} flagged as fraud" + (" (drifted batch)" if drifted else ""))

@@ -39,6 +39,20 @@ SHADOW_MODEL_DIR = "models/shadow"
 REGISTRATION_LOG_PATH = "models/registration_log.jsonl"
 
 
+def _copy_feature_definitions(package_dir: str, dest_dir: str) -> str | None:
+    """Feature definitions travel with the model artifact through every
+    slot (production, shadow, and — see mlops/promote_shadow.py and
+    mlops/rollback.py — a shadow promotion or rollback), the same way
+    model.joblib does, so serving always transforms with the exact
+    vocabulary this model version was trained on."""
+    src = os.path.join(package_dir, "feature_definitions.json")
+    if not os.path.exists(src):
+        return None
+    dest = os.path.join(dest_dir, "feature_definitions.json")
+    shutil.copy2(src, dest)
+    return dest
+
+
 def _log_registration(pointer: dict) -> None:
     os.makedirs(os.path.dirname(REGISTRATION_LOG_PATH), exist_ok=True)
     with open(REGISTRATION_LOG_PATH, "a") as f:
@@ -90,6 +104,7 @@ def register(package_dir: str) -> dict:
     os.makedirs(PRODUCTION_MODEL_DIR, exist_ok=True)
     artifact_path = os.path.join(PRODUCTION_MODEL_DIR, "model.joblib")
     shutil.copy2(os.path.join(package_dir, "model.joblib"), artifact_path)
+    feature_definitions_path = _copy_feature_definitions(package_dir, PRODUCTION_MODEL_DIR)
 
     pointer = {
         "status": "production",
@@ -98,6 +113,7 @@ def register(package_dir: str) -> dict:
         "run_id": run_id,
         "model_uri": f"models:/{REGISTERED_MODEL_NAME}/{model_version}",
         "artifact_path": artifact_path,
+        "feature_definitions_path": feature_definitions_path,
         "package_dir": package_dir,
         "package_id": metadata["package_id"],
         "metrics": metadata["metrics"],
@@ -122,6 +138,7 @@ def register_shadow(package_dir: str) -> dict:
     os.makedirs(SHADOW_MODEL_DIR, exist_ok=True)
     artifact_path = os.path.join(SHADOW_MODEL_DIR, "model.joblib")
     shutil.copy2(os.path.join(package_dir, "model.joblib"), artifact_path)
+    feature_definitions_path = _copy_feature_definitions(package_dir, SHADOW_MODEL_DIR)
 
     pointer = {
         "status": "shadow",
@@ -130,6 +147,7 @@ def register_shadow(package_dir: str) -> dict:
         "run_id": run_id,
         "model_uri": f"models:/{REGISTERED_MODEL_NAME}/{model_version}",
         "artifact_path": artifact_path,
+        "feature_definitions_path": feature_definitions_path,
         "package_dir": package_dir,
         "package_id": metadata["package_id"],
         "metrics": metadata["metrics"],

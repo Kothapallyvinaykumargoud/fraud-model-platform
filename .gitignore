@@ -16,7 +16,10 @@ mlartifacts/
 # don't clear for redistribution in a public repo — only the trained model
 # artifact ships, not the data it was trained on.
 data/*.csv
+data/.ieee_cis_raw/
 models/candidate/
 models/candidate2/
 models/candidate_retrain/
 models/drift_state.json
+models/label_feedback_queue.jsonl
+models/label_feedback_state.json

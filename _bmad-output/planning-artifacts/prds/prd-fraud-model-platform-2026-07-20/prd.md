@@ -2,7 +2,7 @@
 title: Fraud Model Platform
 status: final
 created: 2026-07-20
-updated: 2026-07-20
+updated: 2026-07-21
 ---
 
 # PRD: Fraud Model Platform
@@ -166,19 +166,46 @@ The operator can point the Production Pointer at a specific prior Model Version,
 **Consequences (testable):**
 - After rollback, the inference API's Fraud Verdicts come from the specified prior Model Version, confirmed via the version ID in the API response (FR-8).
 
+### 4.8 Data Sourcing & Feature Store
+
+**Description:** Where training data comes from, and one shared place the transform from raw columns to model-ready features lives — reused by training, retraining, and serving instead of being duplicated in each. Added 2026-07-21, reconciling a request to source real, bank-like transaction data against the platform's free-tier cost model (see decision log).
+
+#### FR-17: Real Feature Dataset
+Training uses a small, stratified sample of the IEEE-CIS Fraud Detection dataset (real Vesta e-commerce transactions with named features — card network/type, product code, purchaser email domain, device type, transaction amount) in place of the earlier anonymized-PCA Kaggle ULB dataset.
+**Consequences (testable):**
+- Absence of the real sample fails loudly with instructions (mlops/download_ieee_cis.py), rather than silently substituting synthetic data without saying so.
+- Every model input is traceable to a human-readable column name — no anonymized PCA components.
+
+#### FR-18: Lightweight Feature Store
+Feature transformation logic (numeric columns, categorical vocabulary) lives in one versioned, file-based module reused by training and serving.
+**Consequences (testable):**
+- A feature definition change updates every consumer from one place; nothing recomputes its own transform independently.
+- The feature set carries its own schema/version (feature_definitions.json), retrievable and inspectable independent of any single model run, and travels with a model artifact through packaging, registration, shadow promotion, and rollback alike.
+
+### 4.9 Explainability
+
+**Description:** A validation-time report of what the model weighs, added alongside the existing metric-threshold gate. Added 2026-07-21 (see decision log).
+
+#### FR-19: Feature Attribution
+A SHAP-based feature-attribution summary is produced once per training run, not per live request.
+**Consequences (testable):**
+- A candidate model's package includes a ranked list of its top contributing features and their relative weight.
+- Computing it adds no latency or CPU cost to the `/predict` path — the 1GB RAM budget has no room for per-request SHAP.
+
 ## 5. Non-Goals (Explicit)
 
 - Not building a novel or highly accurate fraud-detection model — model quality is a means, not the goal.
-- Not using managed Kubernetes (EKS) or self-hosted Jenkins — ruled out in the brief on cost/RAM grounds.
+- Not using managed Kubernetes (EKS), multi-AZ high availability, self-hosted Jenkins, Airflow, Datadog/ELK, or IAM/KMS/VPC hardening — ruled out on cost/RAM grounds; these appear in enterprise MLOps patterns referenced for inspiration (2026-07-21) but stay out of scope here.
 - Not multi-node or highly-available Kubernetes — single node only.
-- Not sourcing real transaction data or integrating with an actual bank.
+- Not integrating with an actual bank or live transaction feed — a small, sampled slice of a real public dataset (IEEE-CIS, FR-17) stands in for bank data.
+- Not building a production-grade feature platform (e.g. SageMaker Feature Store) — a lightweight, file/local versioned feature store only (FR-18).
 - Not implementing production security hardening, compliance controls, or authentication on the API. `[ASSUMPTION: no auth layer in scope — flag if this should change]`
 - Not building alerting (paging, on-call) beyond Grafana dashboards. `[ASSUMPTION]`
 
 ## 6. MVP Scope
 
 ### 6.1 In Scope
-FR-1 through FR-16 (see §4).
+FR-1 through FR-19 (see §4).
 
 ### 6.2 Out of Scope for MVP
 - Multi-model support (serving more than one fraud model concurrently).
@@ -204,10 +231,12 @@ FR-1 through FR-16 (see §4).
 3. Does k3s + Prometheus + Grafana + the inference API actually fit in 1GB RAM steady-state, and does retraining fit when it shares the box on-demand? — unverified until built.
 4. Is the AWS account still within its 12-month free-tier window?
 5. Exact inference API request/response schema (see FR-8 assumption).
+6. IEEE-CIS is a Kaggle *competition* dataset (FR-17) — downloading it needs a Kaggle account that has accepted the competition rules on kaggle.com, not just an API token. Unresolved until the learner has actually done that once; mlops/download_ieee_cis.py fails loudly with instructions until then.
 
 ## 9. Assumptions Index
 
 - §4.4 FR-8 — Response schema (verdict + confidence score + serving Model Version ID) and response-time target (<1s) not yet confirmed.
 - §4.5 FR-12 — Drift statistic method not yet chosen.
 - §4.6 FR-15 — Auto-retrain promotion requires beating the current production model's held-out metric, not just clearing the fixed validation bar — a proposed resolution to the brief's flagged risk, not yet confirmed.
+- §4.8 FR-17 — Sample size (50,000 rows, stratified to preserve IEEE-CIS's real ~3.5% fraud rate) is implemented as a default in mlops/download_ieee_cis.py, not separately confirmed with the learner beyond this PRD update.
 - §5 — No API authentication layer and no alerting beyond dashboards assumed in scope for MVP.

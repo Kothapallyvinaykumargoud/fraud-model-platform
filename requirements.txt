@@ -8,3 +8,5 @@ uvicorn[standard]==0.32.0
 pydantic==2.9.2
 prometheus-client==0.21.0
 requests==2.32.3
+shap==0.44.1
+kaggle==2.2.3

@@ -1,0 +1,45 @@
+{
+  "sample_size": 200,
+  "top_features": [
+    {
+      "feature": "D1",
+      "mean_abs_shap": 0.044841
+    },
+    {
+      "feature": "TransactionAmt",
+      "mean_abs_shap": 0.032988
+    },
+    {
+      "feature": "card6=credit",
+      "mean_abs_shap": 0.032578
+    },
+    {
+      "feature": "ProductCD=W",
+      "mean_abs_shap": 0.031764
+    },
+    {
+      "feature": "ProductCD=C",
+      "mean_abs_shap": 0.029758
+    },
+    {
+      "feature": "DeviceType=missing",
+      "mean_abs_shap": 0.026411
+    },
+    {
+      "feature": "C1",
+      "mean_abs_shap": 0.02519
+    },
+    {
+      "feature": "C2",
+      "mean_abs_shap": 0.023991
+    },
+    {
+      "feature": "card6=debit",
+      "mean_abs_shap": 0.020365
+    },
+    {
+      "feature": "DeviceType=mobile",
+      "mean_abs_shap": 0.011846
+    }
+  ]
+}
